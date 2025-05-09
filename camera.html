@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mobile Camera Recorder</title>
+    <style>
+        body { max-width: 600px; margin: 20px auto; padding: 20px; }
+        #qrContainer { margin: 20px 0; text-align: center; }
+        #liveFeed { width: 100%; background: #000; }
+        button { padding: 10px 20px; margin: 5px; }
+        .responsive-box { display: flex; flex-direction: column; align-items: center; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+    <div class="responsive-box">
+        <button onclick="startCamera()">Start Camera</button>
+        <video id="liveFeed" autoplay></video>
+        <button onclick="stopRecording()" disabled id="stopBtn">Stop Recording</button>
+        <div id="qrContainer">
+            <h3>Scan to open on mobile:</h3>
+            <div id="qrcode"></div>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let recordedChunks = [];
+        const liveFeed = document.getElementById('liveFeed');
+        const stopBtn = document.getElementById('stopBtn');
+
+        // Generate QR Code with current page URL
+        function generateQR() {
+            const qrcode = new QRCode(document.getElementById("qrcode"), {
+                text: window.location.href,
+                width: 200,
+                height: 200,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" }, // Prefer rear camera
+                    audio: true 
+                });
+                
+                liveFeed.srcObject = stream;
+                mediaRecorder = new MediaRecorder(stream);
+
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/mp4' });
+                    const videoUrl = URL.createObjectURL(blob);
+                    
+                    const shouldDownload = confirm('Download recording?');
+                    if (shouldDownload) {
+                        const a = document.createElement('a');
+                        a.href = videoUrl;
+                        a.download = `recording-${Date.now()}.mp4`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }
+                    
+                    URL.revokeObjectURL(videoUrl);
+                    recordedChunks = [];
+                    stream.getTracks().forEach(track => track.stop());
+                    liveFeed.srcObject = null;
+                };
+
+                mediaRecorder.start();
+                stopBtn.disabled = false;
+            } catch (error) {
+                alert('Camera access required for recording');
+                console.error('Camera error:', error);
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                stopBtn.disabled = true;
+            }
+        }
+
+        // Initialize QR code when page loads
+        window.onload = generateQR;
+    </script>
+</body>
+</html>
